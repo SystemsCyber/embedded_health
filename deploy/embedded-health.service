@@ -31,7 +31,13 @@ ExecReload=/bin/kill -s HUP $MAINPID
 Restart=always
 RestartSec=5s
 StartLimitIntervalSec=0
-WatchdogSec=60
+
+# Deliberately NO WatchdogSec.  gunicorn implements the sd_notify READY and
+# STATUS messages (hence Type=notify above) but does not send periodic
+# WATCHDOG=1 pings, so setting WatchdogSec makes systemd kill and restart a
+# perfectly healthy arbiter on every expiry -- a self-inflicted outage that
+# looks like a mysterious 502.  gunicorn's own --timeout already reaps workers
+# that wedge, and Restart=always covers an arbiter that genuinely dies.
 
 # Writable state lives here and nowhere else.
 StateDirectory=embedded-health

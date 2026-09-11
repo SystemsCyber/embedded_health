@@ -61,14 +61,14 @@ deploy/    production deployment script, systemd unit, nginx site
 On `daily-server`, from a clone of this repository:
 
 ```sh
-sudo ./deploy/deploy.sh --repo https://github.com/<you>/embedded_health.git
+sudo ./deploy/deploy.sh --repo https://github.com/SystemsCyber/embedded_health.git
 ```
 
 or, on a machine with nothing checked out yet:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<you>/embedded_health/main/deploy/deploy.sh \
-  | sudo bash -s -- --repo https://github.com/<you>/embedded_health.git
+curl -fsSL https://raw.githubusercontent.com/SystemsCyber/embedded_health/main/deploy/deploy.sh \
+  | sudo bash -s -- --repo https://github.com/SystemsCyber/embedded_health.git
 ```
 
 The script installs any missing prerequisites, clones or fast-forwards the
@@ -104,7 +104,7 @@ a worker wedges.
 On each BeagleBone Black (or Pi, or anything else running Linux):
 
 ```sh
-git clone https://github.com/<you>/embedded_health.git
+git clone https://github.com/SystemsCyber/embedded_health.git
 cd embedded_health
 sudo ./agent/install-agent.sh \
   --url http://daily-server.research.colostate.edu/embedded_health/api/heartbeat \

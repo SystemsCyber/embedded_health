@@ -6,11 +6,11 @@
 # upgrades the code in place, keeps the database and any hand-edited config,
 # and restarts only what needs restarting.
 #
-#   sudo ./deploy/deploy.sh --repo https://github.com/<you>/embedded_health.git
+#   sudo ./deploy/deploy.sh --repo https://github.com/SystemsCyber/embedded_health.git
 #
 # Or as a one-liner on a fresh box (it will clone the repo itself):
-#   curl -fsSL https://raw.githubusercontent.com/<you>/embedded_health/main/deploy/deploy.sh \
-#     | sudo bash -s -- --repo https://github.com/<you>/embedded_health.git
+#   curl -fsSL https://raw.githubusercontent.com/SystemsCyber/embedded_health/main/deploy/deploy.sh \
+#     | sudo bash -s -- --repo https://github.com/SystemsCyber/embedded_health.git
 #
 # Options:
 #   --repo URL          git repository to deploy from

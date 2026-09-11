@@ -20,7 +20,7 @@ AGENT_VERSION="1.0.0"
 CONFIG_FILE="${NHA_CONFIG:-/etc/embedded-health/agent.conf}"
 
 # ---- defaults (override in $CONFIG_FILE) ----------------------------------
-HEALTH_URL="http://daily-server.research.colostate.edu/embedded_health/api/heartbeat"
+HEALTH_URL="http://192.168.1.1/embedded_health/api/heartbeat"
 INTERVAL=60           # seconds between heartbeats
 IFACE=""              # network interface to report; auto-detected when empty
 TAGS=""               # comma-separated free-form labels, e.g. "lab-b,bbb,cyber"

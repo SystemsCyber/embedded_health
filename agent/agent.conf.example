@@ -2,7 +2,12 @@
 # Configuration for node-health-agent.sh.  Plain POSIX shell assignments.
 
 # Where to report.  Must be reachable from the node's subnet.
-HEALTH_URL="http://daily-server.research.colostate.edu/embedded_health/api/heartbeat"
+#
+# Use the server's ADDRESS ON THAT SUBNET, not its hostname, unless the subnet's
+# DHCP server hands out domain-name-servers -- many lab subnets do not, and a
+# node that cannot resolve the name simply never reports in.  The nginx site
+# answers to the bare address as well as the hostname, so this just works.
+HEALTH_URL="http://192.168.1.1/embedded_health/api/heartbeat"
 
 # Seconds between heartbeats.  The server may lower or raise this at runtime;
 # whatever it reports wins, so the fleet's cadence stays centrally controlled.

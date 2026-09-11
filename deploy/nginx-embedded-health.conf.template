@@ -1,31 +1,26 @@
 # ---------------------------------------------------------------------------
-# Embedded node health service -- nginx site
+# Embedded node health service -- subnet-facing site
 #
 # Rendered by deploy/deploy.sh, which substitutes:
-#   @LISTEN@      the IPv4 address of the subnet-facing interface (eth0)
+#   @LISTEN@      the IPv4 address of the subnet-facing interface
 #   @SERVER_NAME@ the public hostname
 #
-# The listen directive is pinned to the eth0 address rather than 0.0.0.0, so
-# the service is only ever exposed on the research subnet -- an accidental
-# route on another interface cannot reach it.
+# The listen directive is pinned to that address rather than 0.0.0.0, so the
+# service is only ever exposed on the lab subnet -- an accidental route on
+# another interface cannot reach it.  A specific address also beats a wildcard
+# "listen 80" elsewhere in the configuration for requests arriving here, so
+# this block owns the address without disturbing any existing site.
+#
+# Upstream and rate-limit zones are declared in
+# /etc/nginx/conf.d/00-embedded_health_zones.conf.
 # ---------------------------------------------------------------------------
-
-# One heartbeat a minute per node is the design point; 30/min per source IP
-# leaves plenty of headroom while still capping a runaway agent.
-limit_req_zone $binary_remote_addr zone=eh_beat:1m rate=30r/m;
-limit_req_status 429;
-
-# The dashboard polls every 10 s; allow browsers a comfortable ceiling.
-limit_req_zone $binary_remote_addr zone=eh_ui:1m rate=120r/m;
-
-upstream embedded_health_app {
-    server 127.0.0.1:8787 fail_timeout=10s;
-    keepalive 8;
-}
 
 server {
     listen @LISTEN@:80;
-    server_name @SERVER_NAME@;
+
+    # Match the hostname and the bare address both: a lab subnet often has no
+    # DNS server of its own, so nodes reach this by IP and send the IP as Host.
+    server_name @SERVER_NAME@ @LISTEN@;
 
     # Heartbeats are tiny; anything larger is not one of our agents.
     client_max_body_size 8k;

@@ -79,19 +79,52 @@ works by fetching the dashboard and posting a throwaway heartbeat through nginx
 before deleting it again. It is idempotent — run it again to upgrade; it keeps
 the database and any edits you have made to `server.env`.
 
-Useful flags: `--branch`, `--iface` (default `eth0`), `--listen ADDR` to override
-interface detection, `--server-name`, `--interval`, `--no-nginx`, and
-`--uninstall` (which removes the services and the nginx site but keeps the
-database).
+Pass `--iface` whenever the subnet-facing interface is not `eth0` — on a server
+that also has a campus-facing NIC it usually is not. Other useful flags:
+`--branch`, `--listen ADDR` to override interface detection, `--server-name`,
+`--interval`, `--no-nginx`, and `--uninstall` (which removes the services and
+the nginx site but keeps the database).
 
 ### How it is bound
 
 Gunicorn listens on `127.0.0.1:8787` and nothing else. nginx is the only thing
-that talks to it, and nginx is pinned to the IPv4 address of `eth0` rather than
-`0.0.0.0`, so the service is reachable from the research subnet and from nowhere
-else — a stray route or a second interface coming up later cannot expose it.
-The deploy script resolves that address at install time and fails loudly if
-`eth0` has none yet.
+that talks to it, and nginx is pinned to the IPv4 address of the subnet-facing
+interface rather than `0.0.0.0`, so the service is reachable from the lab subnet
+and from nowhere else — a stray route or a second interface coming up later
+cannot expose it. The deploy script resolves that address at install time and
+fails loudly if the interface has none yet.
+
+Because nginx prefers a specific listen address over a wildcard one, this block
+owns its address outright without disturbing any `listen 80` site already on the
+box.
+
+### Reading the dashboard from outside the subnet
+
+The flip side of that binding is that the dashboard is only reachable *from* the
+subnet. If people need to read it from their desks, do **not** add a second
+server block on the campus address: nginx's specific-address preference means
+such a block would capture every request to that address and shadow the existing
+site entirely, not just `/embedded_health`. Instead add one line inside the
+server block that already serves the public hostname:
+
+```nginx
+include /etc/nginx/embedded_health_location.conf;
+```
+
+then `sudo nginx -t && sudo systemctl reload nginx`. That snippet is installed by
+`deploy.sh` and is inert until included. It serves the dashboard and the read
+endpoints only — the heartbeat endpoint returns 403 there and `limit_except GET
+HEAD` refuses anything else that mutates state, so the service's only write path
+stays confined to the subnet.
+
+### A lab subnet usually has no DNS
+
+If the DHCP server for the subnet does not hand out `domain-name-servers` (and
+lab subnets frequently do not), the nodes cannot resolve the public hostname.
+Point the agents at the server's address on the subnet instead — the nginx site
+matches the bare IP as well as the hostname, so `--url http://<subnet-ip>/...`
+works without further configuration. The same goes for `routers`: nodes with no
+default route still reach the server fine, because it is on-link.
 
 `Restart=always` plus `systemctl enable` covers both halves of "always up": the
 service comes back after a crash and after a reboot. The unit runs under a
@@ -107,9 +140,12 @@ On each BeagleBone Black (or Pi, or anything else running Linux):
 git clone https://github.com/SystemsCyber/embedded_health.git
 cd embedded_health
 sudo ./agent/install-agent.sh \
-  --url http://daily-server.research.colostate.edu/embedded_health/api/heartbeat \
+  --url http://192.168.1.1/embedded_health/api/heartbeat \
   --tags lab-b,bench-3
 ```
+
+Use the server's address on the lab subnet rather than its hostname unless the
+subnet's DHCP hands out a resolver — see the DNS note above.
 
 The installer copies the agent to `/usr/local/sbin`, writes
 `/etc/embedded-health/agent.conf`, **sends one test heartbeat so a typo in the

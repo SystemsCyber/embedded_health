@@ -75,9 +75,16 @@ if [[ $UNINSTALL -eq 1 ]]; then
   systemctl disable --now "$SVC_NAME" 2>/dev/null || true
   rm -f "/etc/systemd/system/${SVC_NAME}.service"
   systemctl daemon-reload
+  if grep -rlq 'embedded_health_location.conf' /etc/nginx 2>/dev/null; then
+    warn "a site file still includes embedded_health_location.conf; remove that line"
+    warn "before reloading nginx, or the configuration test will fail:"
+    grep -rl 'embedded_health_location.conf' /etc/nginx 2>/dev/null | sed 's/^/      /'
+  fi
   rm -f /etc/nginx/sites-enabled/embedded_health \
         /etc/nginx/sites-available/embedded_health \
         /etc/nginx/conf.d/embedded_health.conf \
+        /etc/nginx/conf.d/00-embedded_health_zones.conf \
+        /etc/nginx/embedded_health_location.conf \
         /etc/nginx/embedded_health_proxy.conf
   if nginx -t >/dev/null 2>&1; then systemctl reload nginx || true; else warn "nginx config left unreloaded"; fi
   info "removed. Code in $PREFIX and the database in /var/lib/embedded-health were kept."
@@ -235,6 +242,13 @@ if [[ $DO_NGINX -eq 1 ]]; then
   step "nginx"
   command -v nginx >/dev/null || die "nginx is not installed"
   install -m 0644 "$PREFIX/deploy/embedded_health_proxy.conf" /etc/nginx/embedded_health_proxy.conf
+  # Named to sort first so the upstream and zones exist before anything -- site
+  # file or an include in someone else's server block -- references them.
+  install -m 0644 "$PREFIX/deploy/nginx-embedded-health-zones.conf" \
+                  /etc/nginx/conf.d/00-embedded_health_zones.conf
+  # Available but inert until a server block includes it; see step 9.
+  install -m 0644 "$PREFIX/deploy/nginx-embedded-health-location.conf" \
+                  /etc/nginx/embedded_health_location.conf
 
   RENDERED=$(mktemp)
   sed -e "s|@LISTEN@|$LISTEN|g" -e "s|@SERVER_NAME@|$SERVER_NAME|g" \
@@ -283,7 +297,34 @@ fi
 # ---------------------------------------------------------------------------
 # 9. Summary
 # ---------------------------------------------------------------------------
-BEAT_URL="http://$SERVER_NAME/embedded_health/api/heartbeat"
+BEAT_URL="http://$LISTEN/embedded_health/api/heartbeat"
+
+# If some other server block already answers for this hostname on a wildcard
+# address, browsing the public name will not reach us -- say so concretely
+# rather than letting it look like a broken deployment.
+# Our own site file contributes one such line, so more than one means somebody
+# else claims the name too.
+NAME_HITS=0
+if [[ $DO_NGINX -eq 1 ]]; then
+  NAME_HITS=$(nginx -T 2>/dev/null \
+    | grep -c "^[[:space:]]*server_name[[:space:]].*${SERVER_NAME//./\\.}" || true)
+fi
+if [[ "${NAME_HITS:-0}" -gt 1 ]]; then
+  cat <<EOF
+
+${C_WARN}Note: another server block already answers for $SERVER_NAME.${C_OFF}
+Requests to that name arrive on a different interface and will not reach this
+site, so the dashboard is reachable at http://$LISTEN/embedded_health/ but not
+yet at the public hostname. To expose it there read-only, add one line inside
+that existing server block and reload:
+
+    include /etc/nginx/embedded_health_location.conf;
+
+That snippet serves the dashboard and the read endpoints only; the heartbeat
+endpoint stays confined to $LISTEN.
+EOF
+fi
+
 cat <<EOF
 
 ${C_OK}Deployment complete.${C_OFF}

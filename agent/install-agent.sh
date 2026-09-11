@@ -33,6 +33,9 @@ command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || {
     echo "error: install curl or wget first (apt-get install -y curl)" >&2; exit 1; }
 
 echo "==> installing agent to $BIN"
+# Minimal embedded images often ship without /usr/local/sbin, and `install`
+# will not create the leading directory for us portably (BusyBox has no -D).
+mkdir -p "$(dirname "$BIN")"
 install -m 0755 "$SRC_DIR/node-health-agent.sh" "$BIN"
 
 mkdir -p "$CONF_DIR"

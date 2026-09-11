@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# Embedded node health service -- nginx site
+#
+# Rendered by deploy/deploy.sh, which substitutes:
+#   @LISTEN@      the IPv4 address of the subnet-facing interface (eth0)
+#   @SERVER_NAME@ the public hostname
+#
+# The listen directive is pinned to the eth0 address rather than 0.0.0.0, so
+# the service is only ever exposed on the research subnet -- an accidental
+# route on another interface cannot reach it.
+# ---------------------------------------------------------------------------
+
+# One heartbeat a minute per node is the design point; 30/min per source IP
+# leaves plenty of headroom while still capping a runaway agent.
+limit_req_zone $binary_remote_addr zone=eh_beat:1m rate=30r/m;
+limit_req_status 429;
+
+# The dashboard polls every 10 s; allow browsers a comfortable ceiling.
+limit_req_zone $binary_remote_addr zone=eh_ui:1m rate=120r/m;
+
+upstream embedded_health_app {
+    server 127.0.0.1:8787 fail_timeout=10s;
+    keepalive 8;
+}
+
+server {
+    listen @LISTEN@:80;
+    server_name @SERVER_NAME@;
+
+    # Heartbeats are tiny; anything larger is not one of our agents.
+    client_max_body_size 8k;
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+
+    server_tokens off;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+
+    # Buffer the access log: at fleet scale this is a lot of tiny writes to
+    # what may well be the server's system disk.
+    access_log /var/log/nginx/embedded_health.access.log combined buffer=32k flush=10s;
+    error_log  /var/log/nginx/embedded_health.error.log warn;
+
+    # Canonicalise /embedded_health -> /embedded_health/ so the page's relative
+    # API URLs resolve correctly.
+    location = /embedded_health { return 301 /embedded_health/; }
+
+    location = /embedded_health/api/heartbeat {
+        limit_req zone=eh_beat burst=10 nodelay;
+        proxy_pass http://embedded_health_app/api/heartbeat;
+        include /etc/nginx/embedded_health_proxy.conf;
+    }
+
+    location /embedded_health/ {
+        limit_req zone=eh_ui burst=40 nodelay;
+        # The trailing slash strips the prefix, keeping the Flask app mountable
+        # at any path without knowing about it.
+        proxy_pass http://embedded_health_app/;
+        include /etc/nginx/embedded_health_proxy.conf;
+    }
+}

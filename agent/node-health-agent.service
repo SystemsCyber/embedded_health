@@ -1,0 +1,43 @@
+[Unit]
+Description=Embedded node health heartbeat agent
+Documentation=https://daily-server.research.colostate.edu/embedded_health/
+# Wait for an address to actually exist, not merely for the stack to be up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/node-health-agent.sh
+EnvironmentFile=-/etc/default/node-health-agent
+
+# Never give up: the whole point is that the node reports in whenever it can.
+Restart=always
+RestartSec=15s
+StartLimitIntervalSec=0
+
+# Keep the agent from ever being the reason a node misbehaves.
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=32M
+TasksMax=16
+
+# Hardening -- the agent only needs to read /proc, /sys and talk to the network.
+User=nobody
+Group=nogroup
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

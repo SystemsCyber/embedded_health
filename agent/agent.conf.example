@@ -1,0 +1,24 @@
+# /etc/embedded-health/agent.conf
+# Configuration for node-health-agent.sh.  Plain POSIX shell assignments.
+
+# Where to report.  Must be reachable from the node's subnet.
+HEALTH_URL="http://daily-server.research.colostate.edu/embedded_health/api/heartbeat"
+
+# Seconds between heartbeats.  The server may lower or raise this at runtime;
+# whatever it reports wins, so the fleet's cadence stays centrally controlled.
+INTERVAL=60
+
+# Interface to report the address of.  Leave empty to auto-detect the one that
+# carries the default route (correct on a BeagleBone Black with eth0 up).
+IFACE=""
+
+# Free-form labels shown on the dashboard, comma separated.
+# e.g. TAGS="lab-b,bench-3,bbb"
+TAGS=""
+
+# Override the auto-detected hardware model string if you want a nicer label.
+MODEL=""
+
+# Per-request timeout in seconds, and the ceiling on retry backoff.
+TIMEOUT=10
+MAX_BACKOFF=600

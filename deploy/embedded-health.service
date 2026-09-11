@@ -1,0 +1,59 @@
+[Unit]
+Description=Embedded node health service (gunicorn)
+Documentation=https://daily-server.research.colostate.edu/embedded_health/
+After=network-online.target
+Wants=network-online.target
+Before=nginx.service
+
+[Service]
+Type=notify
+User=embedded-health
+Group=embedded-health
+WorkingDirectory=/opt/embedded-health/server
+EnvironmentFile=/etc/embedded-health/server.env
+
+# Bound to loopback on purpose: nginx is the only thing that may reach it, and
+# nginx itself listens only on the subnet-facing interface.
+ExecStart=/opt/embedded-health/venv/bin/gunicorn \
+    --bind 127.0.0.1:8787 \
+    --workers 2 \
+    --threads 4 \
+    --worker-class gthread \
+    --timeout 30 \
+    --graceful-timeout 20 \
+    --keep-alive 5 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info \
+    app:app
+
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5s
+StartLimitIntervalSec=0
+WatchdogSec=60
+
+# Writable state lives here and nowhere else.
+StateDirectory=embedded-health
+StateDirectoryMode=0750
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

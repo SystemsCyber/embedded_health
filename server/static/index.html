@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Embedded Node Health</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #fbfcfd;
+    --ink: #15181d;
+    --ink-2: #5b6472;
+    --ink-3: #8a93a1;
+    --line: #e2e6ec;
+    --line-2: #eef1f5;
+    --online: #16a34a;
+    --online-soft: #dcfce7;
+    --late: #d97706;
+    --late-soft: #fef3c7;
+    --offline: #dc2626;
+    --offline-soft: #fee2e2;
+    --stale: #6b7280;
+    --stale-soft: #eceef1;
+    --hub: #2563eb;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1116;
+      --panel: #161a21;
+      --panel-2: #1b2029;
+      --ink: #e7eaef;
+      --ink-2: #9aa4b2;
+      --ink-3: #6b7482;
+      --line: #262c36;
+      --line-2: #1f242c;
+      --online: #34d399;
+      --online-soft: #06281d;
+      --late: #fbbf24;
+      --late-soft: #2c2206;
+      --offline: #f87171;
+      --offline-soft: #2d0f0f;
+      --stale: #8b95a3;
+      --stale-soft: #1f242c;
+      --hub: #60a5fa;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --panel: #161a21; --panel-2: #1b2029;
+    --ink: #e7eaef; --ink-2: #9aa4b2; --ink-3: #6b7482;
+    --line: #262c36; --line-2: #1f242c;
+    --online: #34d399; --online-soft: #06281d;
+    --late: #fbbf24; --late-soft: #2c2206;
+    --offline: #f87171; --offline-soft: #2d0f0f;
+    --stale: #8b95a3; --stale-soft: #1f242c;
+    --hub: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px 56px; }
+
+  header.top {
+    display: flex; flex-wrap: wrap; gap: 12px 20px;
+    align-items: baseline; justify-content: space-between; margin-bottom: 18px;
+  }
+  h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; font-weight: 650; }
+  h1 span { color: var(--ink-3); font-weight: 400; }
+  .meta { color: var(--ink-2); font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--online); display: inline-block; }
+  .pulse.busy { animation: blink .9s ease-in-out infinite; }
+  .pulse.err { background: var(--offline); }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .stat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; box-shadow: var(--shadow);
+  }
+  .stat .n { font-size: 26px; font-weight: 640; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin-top: 3px; }
+  .stat.online .n { color: var(--online); }
+  .stat.late .n { color: var(--late); }
+  .stat.offline .n { color: var(--offline); }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 18px;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line-2); flex-wrap: wrap;
+  }
+  .panel-head h2 { font-size: 13px; margin: 0; font-weight: 620; letter-spacing: .01em; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: 0; }
+
+  #topo { display: block; width: 100%; height: auto; }
+  .topo-body { padding: 6px 8px 12px; overflow-x: auto; }
+  .link { stroke: var(--line); stroke-width: 1.25; }
+  .link.online { stroke: var(--online); stroke-opacity: .5; }
+  .link.late { stroke: var(--late); stroke-opacity: .55; stroke-dasharray: 4 3; }
+  .link.offline, .link.stale { stroke: var(--offline); stroke-opacity: .3; stroke-dasharray: 2 4; }
+  .node-g { cursor: pointer; }
+  .node-g text { font-size: 9.5px; fill: var(--ink-2); text-anchor: middle; }
+  .node-g text.name { fill: var(--ink); font-weight: 600; font-size: 10px; }
+  .node-g:hover circle.dot { stroke-width: 3; }
+  circle.dot { stroke-width: 2; }
+  .hub-label { font-size: 10px; fill: var(--ink-2); text-anchor: middle; }
+  .hub-name { font-size: 11px; fill: var(--ink); font-weight: 640; text-anchor: middle; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  input[type=search], select {
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0;
+  }
+  input[type=search] { flex: 1 1 220px; }
+  input[type=search]:focus, select:focus { outline: 2px solid var(--hub); outline-offset: -1px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--stale);
+    border-radius: var(--radius); padding: 13px 14px; box-shadow: var(--shadow);
+  }
+  .card.online { border-left-color: var(--online); }
+  .card.late { border-left-color: var(--late); }
+  .card.offline { border-left-color: var(--offline); }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .dot-sm { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .card h3 { margin: 0; font-size: 14.5px; font-weight: 640; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    margin-left: auto; font-size: 10.5px; font-weight: 640; text-transform: uppercase;
+    letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; flex: none;
+  }
+  .badge.online { background: var(--online-soft); color: var(--online); }
+  .badge.late { background: var(--late-soft); color: var(--late); }
+  .badge.offline { background: var(--offline-soft); color: var(--offline); }
+  .badge.stale { background: var(--stale-soft); color: var(--stale); }
+  .ip {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 15px; color: var(--ink); letter-spacing: -.01em; margin: 4px 0 10px;
+  }
+  .ip .warn { color: var(--late); font-size: 11px; font-family: inherit; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12.5px; }
+  dt { color: var(--ink-3); }
+  dd { margin: 0; color: var(--ink-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bars { margin-top: 10px; display: grid; gap: 5px; }
+  .bar-row { display: grid; grid-template-columns: 34px 1fr 38px; gap: 8px; align-items: center; font-size: 11px; color: var(--ink-3); }
+  .bar { height: 5px; background: var(--line-2); border-radius: 3px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--hub); border-radius: 3px; }
+  .bar > i.hot { background: var(--late); }
+  .bar > i.crit { background: var(--offline); }
+  .bar-row b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .tags { margin-top: 9px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag { font-size: 10.5px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-2); padding: 1px 7px; border-radius: 999px; }
+  .empty { padding: 42px 20px; text-align: center; color: var(--ink-2); }
+  .empty code { background: var(--panel-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  footer { margin-top: 26px; color: var(--ink-3); font-size: 12px; text-align: center; }
+  .err-banner {
+    background: var(--offline-soft); color: var(--offline); border: 1px solid var(--offline);
+    border-radius: 9px; padding: 9px 13px; margin-bottom: 14px; font-size: 13px;
+  }
+  @media (max-width: 560px) { .card h3 { font-size: 13.5px; } .wrap { padding-inline: 12px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Embedded Node Health <span id="hubname"></span></h1>
+    <div class="meta">
+      <span class="pulse" id="pulse"></span>
+      <span id="updated">connecting…</span>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="c-total">–</div><div class="l">Nodes known</div></div>
+    <div class="stat online"><div class="n" id="c-online">–</div><div class="l">Reachable</div></div>
+    <div class="stat late"><div class="n" id="c-late">–</div><div class="l">Late</div></div>
+    <div class="stat offline"><div class="n" id="c-offline">–</div><div class="l">Unreachable</div></div>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Subnet topology</h2>
+      <div class="legend">
+        <span><i style="background:var(--online)"></i>Reachable</span>
+        <span><i style="background:var(--late)"></i>Late heartbeat</span>
+        <span><i style="background:var(--offline)"></i>Unreachable</span>
+        <span><i style="background:var(--stale)"></i>Stale &gt; 24 h</span>
+      </div>
+    </div>
+    <div class="topo-body"><svg id="topo" role="img" aria-label="Node topology"></svg></div>
+  </section>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Filter by hostname, IP, MAC, model or tag…" autocomplete="off">
+    <select id="filter">
+      <option value="all">All nodes</option>
+      <option value="online">Reachable only</option>
+      <option value="problem">Problems only</option>
+    </select>
+    <select id="sort">
+      <option value="status">Sort: status</option>
+      <option value="hostname">Sort: hostname</option>
+      <option value="ip">Sort: IP address</option>
+      <option value="seen">Sort: last seen</option>
+    </select>
+  </div>
+
+  <div class="grid" id="cards"></div>
+  <div class="empty" id="empty" hidden></div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var API = "api/nodes";
+  var POLL_MS = 10000;
+  var state = { data: null, error: null, fetchedAt: 0 };
+  var el = function (id) { return document.getElementById(id); };
+
+  // ---------- formatting ----------
+  function ago(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 10) return "just now";
+    if (sec < 60) return sec + "s ago";
+    if (sec < 3600) return Math.floor(sec / 60) + "m ago";
+    if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
+    return Math.floor(sec / 86400) + "d ago";
+  }
+  function dur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+    if (d) return d + "d " + h + "h";
+    if (h) return h + "h " + m + "m";
+    return m + "m";
+  }
+  function ipKey(ip) {
+    var p = String(ip || "").split(".");
+    if (p.length !== 4) return 1e12;
+    return p.reduce(function (a, o) { return a * 256 + (parseInt(o, 10) || 0); }, 0);
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  var COLOR = { online: "var(--online)", late: "var(--late)", offline: "var(--offline)", stale: "var(--stale)" };
+  var LABEL = { online: "online", late: "late", offline: "offline", stale: "stale" };
+  var RANK = { offline: 0, late: 1, stale: 2, online: 3 };
+
+  // ---------- topology ----------
+  function drawTopo(nodes) {
+    var svg = el("topo");
+    var NS = "http://www.w3.org/2000/svg";
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    if (!nodes.length) {
+      svg.setAttribute("viewBox", "0 0 600 120");
+      var t = document.createElementNS(NS, "text");
+      t.setAttribute("x", 300); t.setAttribute("y", 64);
+      t.setAttribute("class", "hub-label");
+      t.textContent = "No nodes have checked in yet.";
+      svg.appendChild(t);
+      return;
+    }
+
+    // Ring layout.  Each ring holds as many nodes as it can while keeping at
+    // least MIN_ARC of arc between neighbours, and a ring that is not full
+    // pulls inward so a small fleet does not float in a sea of whitespace.
+    var MIN_ARC = 84, TAU = Math.PI * 2;
+    var rings = [], i = 0, ring = 0, rMax = 270, rMin = 116, prevR = 0;
+    while (i < nodes.length) {
+      var cap = Math.max(6, Math.floor(TAU * rMax / MIN_ARC));
+      var take = nodes.slice(i, i + cap);
+      var R = Math.max(rMin, Math.min(rMax, take.length * MIN_ARC / TAU));
+      rings.push({ items: take, r: R });
+      i += take.length; ring++;
+      prevR = R; rMin = R + 108; rMax += 130;
+    }
+    var maxR = rings[rings.length - 1].r;
+    var pad = 70;
+    var size = Math.round((maxR + pad) * 2);
+    var cx = size / 2, cy = size / 2;
+    svg.setAttribute("viewBox", "0 0 " + size + " " + size);
+    svg.setAttribute("style", "max-height:min(72vh," + size + "px)");
+
+    var links = document.createElementNS(NS, "g");
+    var dots = document.createElementNS(NS, "g");
+    svg.appendChild(links); svg.appendChild(dots);
+
+    rings.forEach(function (ringDef, ri) {
+      var R = ringDef.r, ring = ringDef.items;
+      var offset = ri % 2 ? Math.PI / ring.length : 0;
+      ring.forEach(function (n, k) {
+        var a = (k / ring.length) * TAU - Math.PI / 2 + offset;
+        var x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+
+        var line = document.createElementNS(NS, "line");
+        line.setAttribute("x1", cx); line.setAttribute("y1", cy);
+        line.setAttribute("x2", x); line.setAttribute("y2", y);
+        line.setAttribute("class", "link " + n.status);
+        links.appendChild(line);
+
+        var g = document.createElementNS(NS, "g");
+        g.setAttribute("class", "node-g");
+        g.addEventListener("click", function () {
+          el("q").value = n.hostname; render();
+          var c = document.querySelector(".card"); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+
+        var c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 13);
+        c.setAttribute("class", "dot");
+        c.setAttribute("fill", COLOR[n.status]);
+        c.setAttribute("fill-opacity", n.status === "online" ? ".9" : ".18");
+        c.setAttribute("stroke", COLOR[n.status]);
+        g.appendChild(c);
+
+        var title = document.createElementNS(NS, "title");
+        title.textContent = n.hostname + "  " + (n.ip || "no IP") + "\n" + LABEL[n.status] +
+                            " · last heartbeat " + ago(n.age_s) + (n.model ? "\n" + n.model : "");
+        g.appendChild(title);
+
+        var name = document.createElementNS(NS, "text");
+        name.setAttribute("x", x); name.setAttribute("y", y + 28);
+        name.setAttribute("class", "name");
+        name.textContent = n.hostname.length > 16 ? n.hostname.slice(0, 15) + "…" : n.hostname;
+        g.appendChild(name);
+
+        var ipt = document.createElementNS(NS, "text");
+        ipt.setAttribute("x", x); ipt.setAttribute("y", y + 40);
+        ipt.textContent = n.ip || "—";
+        g.appendChild(ipt);
+
+        dots.appendChild(g);
+      });
+    });
+
+    var hub = document.createElementNS(NS, "circle");
+    hub.setAttribute("cx", cx); hub.setAttribute("cy", cy); hub.setAttribute("r", 34);
+    hub.setAttribute("fill", "var(--panel-2)");
+    hub.setAttribute("stroke", "var(--hub)"); hub.setAttribute("stroke-width", 2);
+    dots.appendChild(hub);
+
+    var hn = document.createElementNS(NS, "text");
+    hn.setAttribute("x", cx); hn.setAttribute("y", cy - 2);
+    hn.setAttribute("class", "hub-name"); hn.textContent = "health";
+    dots.appendChild(hn);
+    var hl = document.createElementNS(NS, "text");
+    hl.setAttribute("x", cx); hl.setAttribute("y", cy + 12);
+    hl.setAttribute("class", "hub-label"); hl.textContent = "service";
+    dots.appendChild(hl);
+  }
+
+  // ---------- cards ----------
+  function bar(label, pct, unit) {
+    if (pct == null) return "";
+    var cls = pct >= 90 ? "crit" : pct >= 75 ? "hot" : "";
+    return '<div class="bar-row"><span>' + label + '</span><span class="bar"><i class="' + cls +
+           '" style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></span><b>' +
+           pct.toFixed(0) + (unit || "%") + "</b></div>";
+  }
+
+  function card(n) {
+    var rows = "";
+    rows += "<dt>MAC</dt><dd>" + esc(n.mac || "—") + "</dd>";
+    if (n.model) rows += "<dt>Model</dt><dd>" + esc(n.model) + "</dd>";
+    rows += "<dt>Last heartbeat</dt><dd>" + ago(n.age_s) + "</dd>";
+    if (n.uptime_s) rows += "<dt>Uptime</dt><dd>" + dur(n.uptime_s) + "</dd>";
+    if (n.load1) rows += "<dt>Load (1m)</dt><dd>" + n.load1.toFixed(2) + "</dd>";
+    if (n.temp_c != null) rows += "<dt>Temp</dt><dd>" + n.temp_c.toFixed(1) + " °C</dd>";
+
+    var bars = bar("mem", n.mem_used_pct) + bar("disk", n.disk_used_pct);
+    var tags = (n.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("");
+
+    return '<article class="card ' + n.status + '">' +
+      '<div class="card-head">' +
+        '<span class="dot-sm" style="background:' + COLOR[n.status] + '"></span>' +
+        "<h3>" + esc(n.hostname) + "</h3>" +
+        '<span class="badge ' + n.status + '">' + LABEL[n.status] + "</span>" +
+      "</div>" +
+      '<div class="ip">' + esc(n.ip || "no address") +
+        (n.ip_mismatch ? ' <span class="warn" title="Node reports ' + esc(n.reported_ip) +
+          ", packets arrive from " + esc(n.source_ip) + '">via ' + esc(n.source_ip) + "</span>" : "") +
+      "</div>" +
+      "<dl>" + rows + "</dl>" +
+      (bars ? '<div class="bars">' + bars + "</div>" : "") +
+      (tags ? '<div class="tags">' + tags + "</div>" : "") +
+      "</article>";
+  }
+
+  // ---------- render ----------
+  function render() {
+    var d = state.data;
+    el("banner").innerHTML = state.error
+      ? '<div class="err-banner">Cannot reach the health service: ' + esc(state.error) +
+        ". Showing the last known state." + "</div>"
+      : "";
+    if (!d) return;
+
+    el("c-total").textContent = d.total;
+    el("c-online").textContent = d.counts.online;
+    el("c-late").textContent = d.counts.late;
+    el("c-offline").textContent = d.counts.offline + d.counts.stale;
+
+    // Ages are recomputed client-side between polls so the UI keeps ticking.
+    var drift = (Date.now() / 1000) - state.fetchedAt;
+    var nodes = d.nodes.map(function (n) {
+      var m = Object.assign({}, n);
+      m.age_s = n.age_s + drift;
+      m.status = m.age_s <= d.late_after_s ? "online"
+               : m.age_s <= d.offline_after_s ? "late"
+               : n.status === "stale" ? "stale" : "offline";
+      return m;
+    });
+
+    drawTopo(nodes.slice().sort(function (a, b) { return ipKey(a.ip) - ipKey(b.ip); }));
+
+    var q = el("q").value.trim().toLowerCase();
+    var f = el("filter").value;
+    var view = nodes.filter(function (n) {
+      if (f === "online" && n.status !== "online") return false;
+      if (f === "problem" && n.status === "online") return false;
+      if (!q) return true;
+      return [n.hostname, n.ip, n.mac, n.model, n.device_id].concat(n.tags || [])
+        .join(" ").toLowerCase().indexOf(q) !== -1;
+    });
+
+    var s = el("sort").value;
+    view.sort(function (a, b) {
+      if (s === "hostname") return a.hostname.localeCompare(b.hostname);
+      if (s === "ip") return ipKey(a.ip) - ipKey(b.ip);
+      if (s === "seen") return a.age_s - b.age_s;
+      return (RANK[a.status] - RANK[b.status]) || a.hostname.localeCompare(b.hostname);
+    });
+
+    el("cards").innerHTML = view.map(card).join("");
+    var empty = el("empty");
+    if (!view.length) {
+      empty.hidden = false;
+      empty.innerHTML = d.total
+        ? "No nodes match that filter."
+        : "No nodes have checked in yet. Install the agent on a device with " +
+          "<code>sudo ./agent/install-agent.sh</code> and it will appear here within " +
+          d.heartbeat_interval + " seconds.";
+    } else { empty.hidden = true; }
+
+    el("foot").textContent = "Heartbeat every " + d.heartbeat_interval + " s · late after " +
+      d.late_after_s + " s · unreachable after " + d.offline_after_s + " s · page refreshes every " +
+      (POLL_MS / 1000) + " s";
+    el("updated").textContent = "updated " + ago(drift);
+  }
+
+  // ---------- polling ----------
+  var inflight = false;
+  function poll() {
+    if (inflight || document.hidden) return;
+    inflight = true;
+    el("pulse").className = "pulse busy";
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 8000);
+    fetch(API, { signal: ctl.signal, cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) {
+        state.data = j; state.error = null; state.fetchedAt = Date.now() / 1000;
+        el("pulse").className = "pulse";
+      })
+      .catch(function (e) {
+        state.error = e.name === "AbortError" ? "request timed out" : e.message;
+        el("pulse").className = "pulse err";
+      })
+      .then(function () { clearTimeout(to); inflight = false; render(); });
+  }
+
+  ["q", "filter", "sort"].forEach(function (id) {
+    el(id).addEventListener("input", render);
+  });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
+
+  el("hubname").textContent = location.hostname ? "· " + location.hostname : "";
+  poll();
+  setInterval(poll, POLL_MS);
+  setInterval(render, 1000);
+})();
+</script>
+</body>
+</html>

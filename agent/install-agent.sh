@@ -69,17 +69,56 @@ fi
 
 # --- boot integration -------------------------------------------------------
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    echo "==> installing systemd unit"
-    install -m 0644 "$SRC_DIR/node-health-agent.service" \
-        /etc/systemd/system/node-health-agent.service
+    UNIT=/etc/systemd/system/node-health-agent.service
+    SDVER=$(systemctl --version 2>/dev/null | head -1 | awk '{print $2}')
+    case "$SDVER" in ''|*[!0-9]*) SDVER=0 ;; esac
+    echo "==> installing systemd unit (systemd ${SDVER:-unknown})"
+    install -m 0644 "$SRC_DIR/node-health-agent.service" "$UNIT"
+
     # nogroup is called nobody on some minimal images.
     getent group nogroup >/dev/null 2>&1 || \
-        sed -i 's/^Group=nogroup$/Group=nobody/' /etc/systemd/system/node-health-agent.service
+        sed -i 's/^Group=nogroup$/Group=nobody/' "$UNIT"
+
+    # The unit is written for a current systemd.  Embedded images are often
+    # many years behind -- Angstrom on AM335x ships systemd 196 (2012) -- and
+    # an unknown directive there is at best ignored with a warning and at worst
+    # stops the unit loading.  Strip anything the local version predates.  All
+    # of it is defence in depth; none of it is needed for the agent to work.
+    below() { [ "${SDVER:-0}" -lt "$1" ]; }
+    drop()  { for k in "$@"; do sed -i "/^$k=/d" "$UNIT"; done; }
+
+    if below 240; then drop SystemCallFilter SystemCallErrorNumber; fi
+    if below 235; then drop LockPersonality; fi
+    if below 233; then drop RestrictNamespaces; fi
+    if below 232; then
+        sed -i 's/^ProtectSystem=strict$/ProtectSystem=full/' "$UNIT"
+        drop ProtectKernelTunables ProtectKernelModules ProtectControlGroups
+    fi
+    if below 231; then drop RestrictRealtime MemoryMax; fi
+    if below 229; then drop StartLimitIntervalSec; fi
+    if below 227; then drop TasksMax; fi
+    if below 214; then drop ProtectSystem ProtectHome; fi
+    if below 211; then drop RestrictAddressFamilies; fi
+    if below 209; then drop NoNewPrivileges PrivateDevices; fi
+    if below 200; then
+        # network-online.target does not exist this far back, and a Wants= on a
+        # missing unit can fail the job outright.
+        sed -i 's/^After=network-online\.target$/After=network.target/' "$UNIT"
+        drop Wants
+    fi
+
     systemctl daemon-reload
-    systemctl enable --now node-health-agent.service
+    systemctl enable node-health-agent.service
+    # NOT "enable --now": that flag arrived in systemd 220 and aborts here on
+    # anything older.  A separate start does the same thing everywhere.
     systemctl restart node-health-agent.service
-    sleep 1
-    systemctl --no-pager --lines=5 status node-health-agent.service || true
+    sleep 2
+    if systemctl is-active node-health-agent.service >/dev/null 2>&1; then
+        echo "    service is running and enabled at boot"
+    else
+        echo "    WARNING: the service did not stay running." >&2
+        systemctl status node-health-agent.service 2>&1 | head -20 >&2 || true
+    fi
     echo
     echo "Done. Logs: journalctl -u node-health-agent -f"
 else

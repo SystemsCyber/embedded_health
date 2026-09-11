@@ -141,8 +141,16 @@ read_uptime()  { awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || echo 0; }
 read_load1()   { awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0; }
 
 read_mem_pct() {
-    awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2}
-         END{ if (t>0) printf "%.1f", (t-a)*100/t; else print 0 }' /proc/meminfo 2>/dev/null || echo 0
+    # MemAvailable only exists on Linux 3.14+.  Older embedded kernels (the
+    # AM335x vendor trees among them) omit it, and treating a missing field as
+    # zero reports every such board as 100% used.  Fall back to the classic
+    # free + buffers + cached estimate.
+    awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2; have=1}
+         /^MemFree:/{f=$2} /^Buffers:/{b=$2} /^Cached:/{c=$2}
+         END{ if (t<=0) {print 0; exit}
+              if (!have) a=f+b+c
+              if (a>t) a=t
+              printf "%.1f", (t-a)*100/t }' /proc/meminfo 2>/dev/null || echo 0
 }
 
 read_disk_pct() {
